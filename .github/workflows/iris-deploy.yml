@@ -39,7 +39,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: npm ci
-        if: hashFiles(''package-lock.json'') != ''''
+        if: hashFiles('package-lock.json') != ''''
       - run: npm run build --if-present
       - run: npm install -g vercel@latest
       - name: Vercel Pull (env)
