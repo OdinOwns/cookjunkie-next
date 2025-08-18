@@ -12,6 +12,11 @@ permissions:
   pages: write
   id-token: write
 
+# REQUIRED by GitHub Pages
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
 jobs:
   setup:
     runs-on: ubuntu-latest
@@ -54,10 +59,13 @@ jobs:
     if: needs.setup.outputs.target == 'pages'
     needs: setup
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
-      # If Node project exists, build it; else create a simple static site
+      # Detect Node project
       - name: Detect Node project
         id: detect
         run: |
@@ -98,7 +106,7 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with: { path: out }
 
-      - id: deploy
+      - id: deployment
         uses: actions/deploy-pages@v4
 
   fly:
