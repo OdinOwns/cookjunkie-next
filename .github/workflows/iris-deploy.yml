@@ -1,0 +1,83 @@
+name: Iris Deploy
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      target: ${{ steps.read.outputs.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          target=pages
+          if [ -f .iris/deploy.target ]; then target=$(tr -d "\r\n\t " < .iris/deploy.target); fi
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+
+  vercel:
+    if: needs.setup.outputs.target == 'vercel'
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm ci
+      - run: npm run build --if-present
+      - run: npm install -g vercel@latest
+      - name: Vercel Pull (env)
+        run: vercel pull --yes --environment=${{ github.event_name == 'pull_request' && 'preview' || 'production' }} --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      - name: Vercel Build
+        run: vercel build ${{ github.event_name == 'pull_request' && '' || '--prod' }} --token=${{ secrets.VERCEL_TOKEN }}
+      - name: Vercel Deploy
+        run: vercel deploy --prebuilt ${{ github.event_name == 'pull_request' && '' || '--prod' }} --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+  pages:
+    if: needs.setup.outputs.target == 'pages'
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm ci
+      - run: npm run build && npx next export
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: out }
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
+  fly:
+    if: needs.setup.outputs.target == 'fly'
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Build and deploy
+        run: |
+          if [ -f Dockerfile ]; then
+            flyctl deploy --remote-only --build-arg GIT_SHA=${{ github.sha }}
+          else
+            echo "No Dockerfile found. Add Dockerfile or set .iris/deploy.target to vercel/pages."
+            exit 1
+          fi
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
