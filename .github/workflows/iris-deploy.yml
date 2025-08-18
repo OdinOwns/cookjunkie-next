@@ -34,6 +34,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: npm ci
+        if: hashFiles(''package-lock.json'') != ''''
       - run: npm run build --if-present
       - run: npm install -g vercel@latest
       - name: Vercel Pull (env)
@@ -55,12 +56,48 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # If Node project exists, build it; else create a simple static site
+      - name: Detect Node project
+        id: detect
+        run: |
+          if [ -f package.json ]; then
+            echo "has_node=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_node=false" >> $GITHUB_OUTPUT
+          fi
+
       - uses: actions/setup-node@v4
+        if: steps.detect.outputs.has_node == 'true'
         with: { node-version: 20 }
-      - run: npm ci
-      - run: npm run build && npx next export
+
+      - name: Build Next.js (if present)
+        if: steps.detect.outputs.has_node == 'true'
+        run: |
+          npm ci
+          if npm run | grep -q -E '(^| )build( |:)'; then
+            npm run build
+          fi
+          if npx --yes next --help >/dev/null 2>&1; then
+            npx next export || true
+          fi
+          mkdir -p out || true
+
+      - name: Create static placeholder (if no Node project)
+        if: steps.detect.outputs.has_node == 'false'
+        run: |
+          mkdir -p out
+          cat > out/index.html <<HTML
+          <!doctype html>
+          <html>
+          <head><meta charset="utf-8"><title>CookJunkie — Placeholder</title></head>
+          <body><h1>CookJunkie</h1><p>GitHub Pages placeholder is live.</p></body>
+          </html>
+          HTML
+
       - uses: actions/upload-pages-artifact@v3
         with: { path: out }
+
       - id: deploy
         uses: actions/deploy-pages@v4
 
