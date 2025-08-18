@@ -2,9 +2,9 @@ name: Iris Deploy
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, feature/iris-update ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, feature/iris-update ]
   workflow_dispatch: {}
 
 permissions:
@@ -12,9 +12,9 @@ permissions:
   pages: write
   id-token: write
 
-# REQUIRED by GitHub Pages
+# GitHub Pages requires this
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: true
 
 jobs:
@@ -39,7 +39,8 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: npm ci
-        if: hashFiles('package-lock.json') != ''''
+        # FIXED quoting below
+        if: hashFiles('package-lock.json') != ''
       - run: npm run build --if-present
       - run: npm install -g vercel@latest
       - name: Vercel Pull (env)
@@ -95,7 +96,7 @@ jobs:
         if: steps.detect.outputs.has_node == 'false'
         run: |
           mkdir -p out
-          cat > out/index.html <<HTML
+          cat > out/index.html <<'HTML'
           <!doctype html>
           <html>
           <head><meta charset="utf-8"><title>CookJunkie — Placeholder</title></head>
